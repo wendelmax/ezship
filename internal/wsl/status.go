@@ -34,23 +34,32 @@ func GetEngineStatus(engine string) EngineInfo {
 	}
 
 	// Check if running
-	// For docker/podman, we can check for the socket or process
-	var statusCmd *exec.Cmd
+	// A lighter check: look for the daemon process (e.g., dockerd, podman)
+	daemonName := engine + "d"
+	socketPath := "/var/run/docker.sock"
+
 	switch engine {
-	case "docker":
-		statusCmd = exec.Command("wsl", "-d", DistroName, "docker", "info")
 	case "podman":
-		statusCmd = exec.Command("wsl", "-d", DistroName, "podman", "info")
+		daemonName = "podman"
+		socketPath = "/run/podman/podman.sock"
 	case "k3s":
-		statusCmd = exec.Command("wsl", "-d", DistroName, "kubectl", "get", "nodes")
+		daemonName = "k3s"
+		socketPath = "/run/k3s/containerd/containerd.sock"
 	case "nerdctl":
-		statusCmd = exec.Command("wsl", "-d", DistroName, "nerdctl", "info")
-	default:
-		statusCmd = exec.Command("wsl", "-d", DistroName, "ps", "aux")
+		daemonName = "containerd"
+		socketPath = "/run/containerd/containerd.sock"
+	case "k3d":
+		daemonName = "dockerd"
+		socketPath = "/run/docker.sock"
 	}
 
+	statusCmd := exec.Command("wsl", "-d", DistroName, "pgrep", "-x", daemonName)
 	if err := statusCmd.Run(); err == nil {
-		info.Running = true
+		// Also check if socket exists for better accuracy
+		socketCheck := exec.Command("wsl", "-d", DistroName, "ls", socketPath)
+		if socketErr := socketCheck.Run(); socketErr == nil {
+			info.Running = true
+		}
 	}
 
 	return info
@@ -58,7 +67,7 @@ func GetEngineStatus(engine string) EngineInfo {
 
 // GetAllEnginesStatus returns the status of all supported engines
 func GetAllEnginesStatus() []EngineInfo {
-	engines := []string{"docker", "podman", "k3s", "nerdctl"}
+	engines := []string{"docker", "podman", "k3s", "nerdctl", "k3d"}
 	results := make([]EngineInfo, len(engines))
 	for i, name := range engines {
 		results[i] = GetEngineStatus(name)

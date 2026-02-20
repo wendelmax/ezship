@@ -5,29 +5,37 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
-// PruneEngines runs 'prune' on all engines supported by ezship
+// PruneEngines runs 'prune' on all running engines supported by ezship
 func PruneEngines() error {
 	engines := []string{"docker", "podman"}
+	errs := []string{}
 	for _, engine := range engines {
-		fmt.Printf("Pruning %s resources...\n", engine)
+		// Only prune if engine is installed and running
+		status := GetEngineStatus(engine)
+		if !status.Running {
+			continue
+		}
+
 		cmd := exec.Command("wsl", "-d", DistroName, "-e", engine, "system", "prune", "-a", "-f", "--volumes")
 		if output, err := cmd.CombinedOutput(); err != nil {
-			fmt.Printf("Warning: Failed to prune %s: %s\n", engine, string(output))
+			errs = append(errs, fmt.Sprintf("%s: %s", engine, string(output)))
 		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("prune errors: %s", strings.Join(errs, "; "))
 	}
 	return nil
 }
 
 // ResetDistro unregisters the ezship distro, effectively deleting it
 func ResetDistro() error {
-	fmt.Printf("Resetting ezship environment (unregistering distro)... ")
 	cmd := exec.Command("wsl", "--unregister", DistroName)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to unregister distro: %s (%w)", string(output), err)
 	}
-	fmt.Println("Done.")
 	return nil
 }
 
@@ -40,7 +48,6 @@ func Vacuum() error {
 		return fmt.Errorf("vhdx file not found at %s", vhdxPath)
 	}
 
-	fmt.Println("Stopping ezship distro before compaction...")
 	exec.Command("wsl", "--terminate", DistroName).Run()
 
 	// Create diskpart script
@@ -51,14 +58,10 @@ func Vacuum() error {
 	}
 	defer os.Remove(scriptPath)
 
-	fmt.Println("Running diskpart compaction (may require admin privileges)...")
 	cmd := exec.Command("diskpart", "/s", scriptPath)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("diskpart failed: %w", err)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("diskpart failed: %s (%w)", string(output), err)
 	}
 
-	fmt.Println("Vacuum completed successfully!")
 	return nil
 }

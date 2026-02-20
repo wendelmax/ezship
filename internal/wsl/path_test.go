@@ -24,8 +24,8 @@ func TestTranslatePath(t *testing.T) {
 }
 
 func TestTranslateArgs(t *testing.T) {
-	args := []string{"run", "-v", "C:\\Users:/data", "alpine"}
-	expected := []string{"run", "-v", "/mnt/c/Users:/data", "alpine"}
+	args := []string{"run", "-v", "C:\\Users:/data", "ubuntu"}
+	expected := []string{"run", "-v", "/mnt/c/Users:/data", "ubuntu"}
 
 	result := TranslateArgs(args)
 	for i, r := range result {
