@@ -26,7 +26,6 @@ func SetupDistro() error {
 
 	// Download Alpine rootfs if not exists
 	if _, err := os.Stat(rootfsPath); os.IsNotExist(err) {
-		fmt.Println("Downloading Alpine Linux rootfs...")
 		if err := downloadFile(AlpineURL, rootfsPath); err != nil {
 			return fmt.Errorf("failed to download Alpine: %w", err)
 		}
@@ -40,28 +39,25 @@ func SetupDistro() error {
 	}
 
 	// Import distro
-	fmt.Println("Importing ezship distro into WSL2...")
 	cmd := exec.Command("wsl", "--import", DistroName, installDir, rootfsPath, "--version", "2")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to import distro: %s (%w)", string(output), err)
 	}
 
-	fmt.Println("WSL distro imported successfully.")
 	return nil
 }
 
 // InstallEngine installs a specific container engine inside the Alpine distro
 func InstallEngine(engine string) error {
-	fmt.Printf("Installing %s inside WSL...\n", engine)
 
 	var setupCmd string
 	switch engine {
 	case "docker":
-		setupCmd = "apk add docker docker-cli-compose openrc && (addgroup root docker || true) && (rc-update add docker default || true) && mkdir -p /run/openrc && touch /run/openrc/softlevel && (service docker start || dockerd &)"
+		setupCmd = "apk add docker docker-cli-compose openrc && (addgroup root docker || true) && (rc-update add docker default || true) && (rc-update add cgroups default || true)"
 	case "podman":
-		setupCmd = "apk add podman openrc && (rc-update add podman default || true) && mkdir -p /run/openrc && touch /run/openrc/softlevel && (service podman start || podman system service &)"
+		setupCmd = "apk add podman openrc && (rc-update add podman default || true) && (rc-update add cgroups default || true)"
 	case "k3s":
-		setupCmd = "apk add curl openrc && mkdir -p /run/openrc && touch /run/openrc/softlevel && curl -sfL https://get.k3s.io | INSTALL_K3S_SKIP_ENABLE=true sh - && (rc-update add k3s default || true) && (service k3s start || true)"
+		setupCmd = "apk add curl openrc && curl -sfL https://get.k3s.io | INSTALL_K3S_SKIP_ENABLE=true sh - && (rc-update add k3s default || true)"
 	default:
 		return fmt.Errorf("unknown engine: %s", engine)
 	}
@@ -69,6 +65,11 @@ func InstallEngine(engine string) error {
 	cmd := exec.Command("wsl", "-d", DistroName, "-u", "root", "sh", "-c", setupCmd)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to install %s: %s (%w)", engine, string(output), err)
+	}
+
+	// Start engine automatically
+	if err := EnsureEngineRunning(engine); err != nil {
+		return fmt.Errorf("installed but failed to start %s: %w", engine, err)
 	}
 
 	// Create global alias (proxy binary)
@@ -94,4 +95,10 @@ func downloadFile(url string, filepath string) error {
 
 	_, err = io.Copy(out, resp.Body)
 	return err
+}
+
+// StopEngine stops an engine's daemon inside WSL
+func StopEngine(engine string) error {
+	cmd := exec.Command("wsl", "-d", DistroName, "-u", "root", "service", engine, "stop")
+	return cmd.Run()
 }

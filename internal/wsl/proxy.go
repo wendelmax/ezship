@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const DistroName = "ezship"
@@ -16,7 +17,9 @@ var Version = "dev"
 // RunProxyCommand executes a command inside the ezship WSL distro
 func RunProxyCommand(engine string, args []string) error {
 	// Ensure engine is running before executing command
-	EnsureEngineRunning(engine)
+	if err := EnsureEngineRunning(engine); err != nil {
+		return fmt.Errorf("failed to start engine %s: %w", engine, err)
+	}
 
 	translatedArgs := TranslateArgs(args)
 
@@ -37,24 +40,51 @@ func RunProxyCommand(engine string, args []string) error {
 	return nil
 }
 
-// EnsureEngineRunning checks if the engine daemon is running and starts it if necessary
-func EnsureEngineRunning(engine string) {
-	// Check if daemon is running (simple ps check)
-	checkCmd := exec.Command("wsl", "-d", DistroName, "ps", "-A")
-	output, err := checkCmd.Output()
-	if err != nil {
-		return
+func EnsureEngineRunning(engine string) error {
+	daemonName := engine + "d"
+	if engine == "podman" || engine == "k3s" {
+		daemonName = engine
 	}
 
-	running := strings.Contains(string(output), engine+"d") || strings.Contains(string(output), engine)
-
-	if !running {
-		fmt.Printf("Starting %s daemon...\n", engine)
-		// Start daemon using OpenRC service or manual start
-		startCmd := exec.Command("wsl", "-d", DistroName, "-u", "root", "sh", "-c",
-			"mkdir -p /run/openrc && touch /run/openrc/softlevel && service "+engine+" start || ("+engine+"d &)")
-		startCmd.Run()
+	// Check if daemon is running using pgrep
+	checkCmd := exec.Command("wsl", "-d", DistroName, "pgrep", "-x", daemonName)
+	if err := checkCmd.Run(); err == nil {
+		return nil // Already running
 	}
+
+	fmt.Printf("Starting %s daemon...\n", engine)
+
+	// Startup sequence:
+	// 1. Ensure /run/openrc exists (required for OpenRC on Alpine)
+	// 2. Start cgroups (required for Docker/Podman)
+	// 3. Attempt to start via OpenRC service
+	// 4. Fallback to starting daemon manually in background
+	startupCmd := fmt.Sprintf(
+		"mkdir -p /run/openrc && touch /run/openrc/softlevel && "+
+			"(rc-service cgroups start || true) && "+
+			"(rc-service %s start || (nohup %s > /var/log/%s.log 2>&1 &))",
+		engine, daemonName, engine)
+
+	startCmd := exec.Command("wsl", "-d", DistroName, "-u", "root", "sh", "-c", startupCmd)
+	if err := startCmd.Run(); err != nil {
+		return fmt.Errorf("failed to execute startup command: %w", err)
+	}
+
+	// Wait for socket to be ready (up to 5 seconds)
+	socketPath := "/var/run/docker.sock"
+	if engine == "podman" {
+		socketPath = "/run/podman/podman.sock"
+	}
+
+	for i := 0; i < 10; i++ {
+		checkSocket := exec.Command("wsl", "-d", DistroName, "ls", socketPath)
+		if err := checkSocket.Run(); err == nil {
+			return nil
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	return fmt.Errorf("timeout waiting for %s socket at %s", engine, socketPath)
 }
 
 // IsDistroInstalled checks if the ezship distro is registered in WSL
