@@ -49,6 +49,10 @@ func SetupDistro() error {
 
 // InstallEngine installs a specific container engine inside the Ubuntu distro
 func InstallEngine(engine string) error {
+	// 0. Ensure distro exists
+	if err := SetupDistro(); err != nil {
+		return err
+	}
 
 	var setupCmd string
 	switch engine {

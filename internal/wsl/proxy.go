@@ -12,7 +12,7 @@ import (
 
 const DistroName = "ezship"
 
-var Version = "0.3.0"
+var Version = "0.3.1"
 
 // RunProxyCommand executes a command inside the ezship WSL distro
 func RunProxyCommand(engine string, args []string) error {
@@ -41,6 +41,14 @@ func RunProxyCommand(engine string, args []string) error {
 }
 
 func EnsureEngineRunning(engine string) error {
+	// Pre-requisite: ensure distro exists
+	installed, err := IsDistroInstalled()
+	if err != nil || !installed {
+		if setupErr := SetupDistro(); setupErr != nil {
+			return fmt.Errorf("distro not installed and setup failed: %w", setupErr)
+		}
+	}
+
 	daemonName := engine + "d"
 	serviceName := engine
 	socketPath := "/var/run/docker.sock"
