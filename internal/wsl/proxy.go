@@ -42,8 +42,23 @@ func RunProxyCommand(engine string, args []string) error {
 
 func EnsureEngineRunning(engine string) error {
 	daemonName := engine + "d"
-	if engine == "podman" || engine == "k3s" {
-		daemonName = engine
+	serviceName := engine
+	socketPath := "/var/run/docker.sock"
+
+	switch engine {
+	case "podman":
+		daemonName = "podman"
+		serviceName = "podman"
+		socketPath = "/run/podman/podman.sock"
+	case "k3s", "kubectl":
+		daemonName = "k3s"
+		serviceName = "k3s"
+		socketPath = "/var/run/k3s/containerd/containerd.sock" // K3s internal containerd
+		engine = "k3s"                                         // For logging/startup
+	case "nerdctl":
+		daemonName = "containerd"
+		serviceName = "containerd"
+		socketPath = "/run/containerd/containerd.sock"
 	}
 
 	// Check if daemon is running using pgrep
@@ -55,28 +70,19 @@ func EnsureEngineRunning(engine string) error {
 	fmt.Printf("Starting %s daemon...\n", engine)
 
 	// Startup sequence:
-	// 1. Ensure /run/openrc exists (required for OpenRC on Alpine)
-	// 2. Start cgroups (required for Docker/Podman)
-	// 3. Attempt to start via OpenRC service
-	// 4. Fallback to starting daemon manually in background
+	// 1. Try starting via 'service'
+	// 2. Fallback to manual background execution
 	startupCmd := fmt.Sprintf(
-		"mkdir -p /run/openrc && touch /run/openrc/softlevel && "+
-			"(rc-service cgroups start || true) && "+
-			"(rc-service %s start || (nohup %s > /var/log/%s.log 2>&1 &))",
-		engine, daemonName, engine)
+		"(service %s start || (nohup %s > /var/log/%s.log 2>&1 &))",
+		serviceName, daemonName, engine)
 
 	startCmd := exec.Command("wsl", "-d", DistroName, "-u", "root", "sh", "-c", startupCmd)
 	if err := startCmd.Run(); err != nil {
 		return fmt.Errorf("failed to execute startup command: %w", err)
 	}
 
-	// Wait for socket to be ready (up to 5 seconds)
-	socketPath := "/var/run/docker.sock"
-	if engine == "podman" {
-		socketPath = "/run/podman/podman.sock"
-	}
-
-	for i := 0; i < 10; i++ {
+	// Wait for socket to be ready (up to 15 seconds)
+	for i := 0; i < 30; i++ {
 		checkSocket := exec.Command("wsl", "-d", DistroName, "ls", socketPath)
 		if err := checkSocket.Run(); err == nil {
 			return nil

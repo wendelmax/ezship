@@ -10,24 +10,24 @@ import (
 )
 
 const (
-	AlpineURL = "https://dl-cdn.alpinelinux.org/alpine/v3.19/releases/x86_64/alpine-minirootfs-3.19.1-x86_64.tar.gz"
+	UbuntuURL = "https://cloud-images.ubuntu.com/minimal/releases/noble/release/ubuntu-24.04-minimal-cloudimg-amd64-root.tar.xz"
 )
 
-// SetupDistro downloads the Alpine rootfs and imports it into WSL
+// SetupDistro downloads the Ubuntu rootfs and imports it into WSL
 func SetupDistro() error {
 	appData := os.Getenv("APPDATA")
 	installDir := filepath.Join(appData, "ezship")
-	rootfsPath := filepath.Join(installDir, "alpine-rootfs.tar.gz")
+	rootfsPath := filepath.Join(installDir, "ubuntu-rootfs.tar.xz")
 
 	// Create install directory
 	if err := os.MkdirAll(installDir, 0755); err != nil {
 		return fmt.Errorf("failed to create install directory: %w", err)
 	}
 
-	// Download Alpine rootfs if not exists
+	// Download Ubuntu rootfs if not exists
 	if _, err := os.Stat(rootfsPath); os.IsNotExist(err) {
-		if err := downloadFile(AlpineURL, rootfsPath); err != nil {
-			return fmt.Errorf("failed to download Alpine: %w", err)
+		if err := downloadFile(UbuntuURL, rootfsPath); err != nil {
+			return fmt.Errorf("failed to download Ubuntu: %w", err)
 		}
 	}
 
@@ -47,17 +47,19 @@ func SetupDistro() error {
 	return nil
 }
 
-// InstallEngine installs a specific container engine inside the Alpine distro
+// InstallEngine installs a specific container engine inside the Ubuntu distro
 func InstallEngine(engine string) error {
 
 	var setupCmd string
 	switch engine {
 	case "docker":
-		setupCmd = "apk add docker docker-cli-compose openrc && (addgroup root docker || true) && (rc-update add docker default || true) && (rc-update add cgroups default || true)"
+		setupCmd = "apt-get update && apt-get install -y docker.io"
 	case "podman":
-		setupCmd = "apk add podman openrc && (rc-update add podman default || true) && (rc-update add cgroups default || true)"
+		setupCmd = "apt-get update && apt-get install -y podman"
 	case "k3s":
-		setupCmd = "apk add curl openrc && curl -sfL https://get.k3s.io | INSTALL_K3S_SKIP_ENABLE=true sh - && (rc-update add k3s default || true)"
+		setupCmd = "apt-get update && apt-get install -y curl && curl -sfL https://get.k3s.io | INSTALL_K3S_SKIP_ENABLE=true sh -"
+	case "nerdctl":
+		setupCmd = "apt-get update && apt-get install -y containerd wget tar && wget -q https://github.com/containerd/nerdctl/releases/download/v1.7.3/nerdctl-1.7.3-linux-amd64.tar.gz -O /tmp/nerdctl.tar.gz && tar -C /usr/local/bin -xzf /tmp/nerdctl.tar.gz"
 	default:
 		return fmt.Errorf("unknown engine: %s", engine)
 	}
@@ -75,6 +77,11 @@ func InstallEngine(engine string) error {
 	// Create global alias (proxy binary)
 	if err := CreateProxyBinary(engine); err != nil {
 		fmt.Printf("Warning: failed to create global alias for %s: %v\n", engine, err)
+	}
+
+	// Extra aliases
+	if engine == "k3s" {
+		CreateProxyBinary("kubectl")
 	}
 
 	return nil
