@@ -1,6 +1,6 @@
 # ezship
 
-**ezship** is a lightweight, high-performance multi-engine container manager designed specifically for Windows users. By leveraging **WSL2** and **Alpine Linux**, it provides a "Docker Desktop" experience without the massive resource overhead.
+**ezship** is a lightweight, high-performance multi-engine container manager designed specifically for Windows users. By leveraging **WSL2** and **Ubuntu Core**, it provides a "Docker Desktop" experience without the massive resource overhead.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/wendelmax/ezship)](https://go.dev/)
@@ -55,7 +55,7 @@ ezship
 ```
 
 ### Setup an Engine
-Install your favorite container engine inside the Alpine backend:
+Install your favorite container engine inside the Ubuntu backend:
 ```powershell
 ezship setup docker
 # or

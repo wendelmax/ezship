@@ -15,7 +15,7 @@ var rootCmd = &cobra.Command{
 	Use:     "ezship",
 	Version: wsl.Version,
 	Short:   "ezship is a lightweight multi-engine container manager for Windows via WSL2",
-	Long: `ezship simplifies container management on Windows by using WSL2 and Alpine Linux.
+	Long: `ezship simplifies container management on Windows by using WSL2 and Ubuntu.
 It supports Docker, Podman, LXC, and Kubernetes (k3s) with a beautiful TUI dashboard.
 
 Author: Jackson Wendel Santos Sá <jacksonwendel@gmail.com>
