@@ -12,7 +12,7 @@ import (
 
 const DistroName = "ezship"
 
-var Version = "dev"
+var Version = "0.3.0"
 
 // RunProxyCommand executes a command inside the ezship WSL distro
 func RunProxyCommand(engine string, args []string) error {
