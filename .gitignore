@@ -1,0 +1,25 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+ezship
+ezship.test
+
+# Packages
+vendor/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# WSL / App temp
+/scripts/alpine-rootfs.tar.gz
+ezship_compact.txt

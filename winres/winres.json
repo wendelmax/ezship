@@ -1,0 +1,60 @@
+{
+  "RT_GROUP_ICON": {
+    "APP": {
+      "0000": [
+        "icon.png"
+      ]
+    }
+  },
+  "RT_MANIFEST": {
+    "#1": {
+      "0409": {
+        "identity": {
+          "name": "ezship",
+          "version": "0.1.0.0"
+        },
+        "description": "ezship - Multi-Engine Control Panel",
+        "minimum-os": "win7",
+        "execution-level": "as invoker",
+        "ui-access": false,
+        "auto-elevate": false,
+        "dpi-awareness": "system",
+        "disable-theming": false,
+        "disable-window-filtering": false,
+        "high-resolution-scrolling-aware": false,
+        "ultra-high-resolution-scrolling-aware": false,
+        "long-path-aware": true,
+        "printer-driver-isolation": false,
+        "gdi-scaling": false,
+        "segment-heap": false,
+        "use-common-controls-v6": true
+      }
+    }
+  },
+  "RT_VERSION": {
+    "#1": {
+      "0000": {
+        "fixed": {
+          "file_version": "0.1.0.0",
+          "product_version": "0.1.0.0"
+        },
+        "info": {
+          "0409": {
+            "Comments": "ezship Multi-Engine Container Manager",
+            "CompanyName": "wendelmax",
+            "FileDescription": "ezship Control Panel",
+            "FileVersion": "0.1.0.0",
+            "InternalName": "ezship",
+            "LegalCopyright": "Copyright 2026 Jackson Wendel Santos Sá",
+            "LegalTrademarks": "ezship",
+            "OriginalFilename": "ezship.exe",
+            "PrivateBuild": "",
+            "ProductName": "ezship",
+            "ProductVersion": "0.1.0.0",
+            "SpecialBuild": ""
+          }
+        }
+      }
+    }
+  }
+}
