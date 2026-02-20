@@ -16,9 +16,11 @@
 - **Multi-Engine Support**: Seamlessly switch between **Docker**, **Podman**, **nerdctl (containerd)**, **LXC**, and **k3s**.
 - **Real-time Monitoring**: Instant status detection of running engines and versions.
 - **Smart Path Translation**: Automatically converts Windows paths (`C:\`) to Linux paths (`/mnt/c/`) for volume mounting.
+- **One-Click Update**: `ezship update` keeps your binary synchronized with the latest GitHub release.
 - **Maintenance Tools**: 
   - `ezship vacuum`: Compresses the WSL disk (`.vhdx`) to reclaim storage space.
   - `ezship prune`: Global cleanup of unused containers, images, and volumes.
+  - `ezship update`: Automatically downloads and applies the latest version.
   - `ezship reset`: Instantly rebuilds your environment from scratch.
 
 ---
@@ -34,6 +36,13 @@ iwr -useb https://raw.githubusercontent.com/wendelmax/ezship/main/scripts/instal
 
 ### Manual Download
 You can download the pre-compiled binaries for your architecture (AMD64, 386, ARM64) with the embedded icon from the [Releases](https://github.com/wendelmax/ezship/releases) page.
+
+### Build from Source
+To build **ezship** with dynamic versioning, use our build script:
+```powershell
+./scripts/build.ps1
+```
+This will generate the binary in the `bin/` directory with the version injected from the current Git tag.
 
 ---
 
@@ -53,12 +62,10 @@ ezship setup docker
 ezship setup podman
 ```
 
-### Transparent Mode
-To use `ezship` as a drop-in replacement for `docker`, just rename or copy the binary:
-```powershell
-cp ezship.exe docker.exe
-./docker ps
-```
+### Transparent Mode (Global Aliases)
+**ezship** automatically creates global aliases during setup. After running `ezship setup docker`, you can immediately run `docker ps` from any terminal.
+
+Supported aliases: `docker`, `podman`, `kubectl`, `nerdctl`.
 
 ---
 
@@ -68,7 +75,9 @@ cp ezship.exe docker.exe
 | :--- | :--- |
 | `ezship prune` | Cleans up unused resources across all engines |
 | `ezship vacuum` | Compacts WSL disk file to free up host space |
+| `ezship update` | Downloads and applies the latest version from GitHub |
 | `ezship reset` | Completely uninstalls and wipes the ezship environment |
+| `ezship --version` | Displays the current version of the tool |
 
 ---
 

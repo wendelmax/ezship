@@ -37,7 +37,8 @@ jobs:
       - name: Build Binary
         run: |
           $val = "${{ matrix.arch }}"
-          go build -ldflags="-s -w" -o ezship-$val.exe ./cmd/ezship
+          $version = "${{ github.ref_name }}"
+          go build -ldflags="-s -w -X 'github.com/wendelmax/ezship/internal/wsl.Version=$version'" -o ezship-$val.exe ./cmd/ezship
         shell: pwsh
 
       - name: Upload Artifact

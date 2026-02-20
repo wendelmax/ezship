@@ -32,6 +32,13 @@ func SetupDistro() error {
 		}
 	}
 
+	// Check if already installed
+	installed, err := IsDistroInstalled()
+	if err == nil && installed {
+		fmt.Println("ezship distro already imported. Skipping.")
+		return nil
+	}
+
 	// Import distro
 	fmt.Println("Importing ezship distro into WSL2...")
 	cmd := exec.Command("wsl", "--import", DistroName, installDir, rootfsPath, "--version", "2")
@@ -50,11 +57,11 @@ func InstallEngine(engine string) error {
 	var setupCmd string
 	switch engine {
 	case "docker":
-		setupCmd = "apk add docker docker-cli-compose && addgroup root docker && rc-update add docker default"
+		setupCmd = "apk add docker docker-cli-compose openrc && (addgroup root docker || true) && (rc-update add docker default || true) && mkdir -p /run/openrc && touch /run/openrc/softlevel && (service docker start || dockerd &)"
 	case "podman":
-		setupCmd = "apk add podman"
+		setupCmd = "apk add podman openrc && (rc-update add podman default || true) && mkdir -p /run/openrc && touch /run/openrc/softlevel && (service podman start || podman system service &)"
 	case "k3s":
-		setupCmd = "curl -sfL https://get.k3s.io | sh -"
+		setupCmd = "apk add curl openrc && mkdir -p /run/openrc && touch /run/openrc/softlevel && curl -sfL https://get.k3s.io | INSTALL_K3S_SKIP_ENABLE=true sh - && (rc-update add k3s default || true) && (service k3s start || true)"
 	default:
 		return fmt.Errorf("unknown engine: %s", engine)
 	}
@@ -62,6 +69,11 @@ func InstallEngine(engine string) error {
 	cmd := exec.Command("wsl", "-d", DistroName, "-u", "root", "sh", "-c", setupCmd)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to install %s: %s (%w)", engine, string(output), err)
+	}
+
+	// Create global alias (proxy binary)
+	if err := CreateProxyBinary(engine); err != nil {
+		fmt.Printf("Warning: failed to create global alias for %s: %v\n", engine, err)
 	}
 
 	return nil

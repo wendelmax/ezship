@@ -27,6 +27,7 @@ jobs:
 
       - name: Verification Build
         run: |
-          GOOS=windows GOARCH=amd64 go build -o ezship-amd64.exe ./cmd/ezship
-          GOOS=windows GOARCH=386 go build -o ezship-386.exe ./cmd/ezship
-          GOOS=windows GOARCH=arm64 go build -o ezship-arm64.exe ./cmd/ezship
+          VERSION="ci-${GITHUB_SHA::7}"
+          GOOS=windows GOARCH=amd64 go build -ldflags="-X 'github.com/wendelmax/ezship/internal/wsl.Version=$VERSION'" -o ezship-amd64.exe ./cmd/ezship
+          GOOS=windows GOARCH=386 go build -ldflags="-X 'github.com/wendelmax/ezship/internal/wsl.Version=$VERSION'" -o ezship-386.exe ./cmd/ezship
+          GOOS=windows GOARCH=arm64 go build -ldflags="-X 'github.com/wendelmax/ezship/internal/wsl.Version=$VERSION'" -o ezship-arm64.exe ./cmd/ezship

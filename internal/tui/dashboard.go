@@ -75,7 +75,7 @@ func (m model) View() string {
 	if m.selected == "About" {
 		content.WriteString(TitleStyle.Render("About ezship") + "\n\n")
 		content.WriteString("  ezship - Multi-Engine Control Panel\n")
-		content.WriteString("  Version: 0.1.0-alpha\n\n")
+		content.WriteString(fmt.Sprintf("  Version: %s\n\n", wsl.Version))
 		content.WriteString(fmt.Sprintf("  Author: %s\n", "Jackson Wendel Santos Sá"))
 		content.WriteString(fmt.Sprintf("  Email:  %s\n", "jacksonwendel@gmail.com"))
 		content.WriteString(fmt.Sprintf("  Repo:   %s\n", "github.com/wendelmax/ezship"))
