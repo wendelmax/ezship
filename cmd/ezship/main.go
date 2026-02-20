@@ -31,10 +31,99 @@ Repo: github.com/wendelmax/ezship`,
 func init() {
 	rootCmd.AddCommand(dashboardCmd)
 	rootCmd.AddCommand(setupCmd)
+	rootCmd.AddCommand(statusCmd)
+	rootCmd.AddCommand(startCmd)
+	rootCmd.AddCommand(stopCmd)
 	rootCmd.AddCommand(pruneCmd)
 	rootCmd.AddCommand(vacuumCmd)
 	rootCmd.AddCommand(resetCmd)
 	rootCmd.AddCommand(updateCmd)
+}
+
+var statusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Show the status of all container engines",
+	Run: func(cmd *cobra.Command, args []string) {
+		engines := wsl.GetAllEnginesStatus()
+		fmt.Printf("%-10s %-12s %s\n", "ENGINE", "STATUS", "VERSION")
+		fmt.Println(strings.Repeat("-", 40))
+		for _, e := range engines {
+			status := "Stopped"
+			if e.Running {
+				status = "Running"
+			}
+			if e.Version == "Not Installed" {
+				status = "Not Found"
+			}
+			fmt.Printf("%-10s %-12s %s\n", e.Name, status, e.Version)
+		}
+	},
+}
+
+var startCmd = &cobra.Command{
+	Use:   "start [engine]",
+	Short: "Start a container engine or a WSL distro",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		target := strings.ToLower(args[0])
+		// Check if it's an engine
+		engines := []string{"docker", "podman", "k3s", "nerdctl", "k3d"}
+		isEngine := false
+		for _, e := range engines {
+			if e == target {
+				isEngine = true
+				break
+			}
+		}
+
+		if isEngine {
+			if err := wsl.EnsureEngineRunning(target); err != nil {
+				fmt.Printf("Error starting engine %s: %v\n", target, err)
+				os.Exit(1)
+			}
+			fmt.Printf("Engine %s started.\n", target)
+		} else {
+			// Try to start as a distro
+			if err := wsl.StartDistro(target); err != nil {
+				fmt.Printf("Error starting distro %s: %v\n", target, err)
+				os.Exit(1)
+			}
+			fmt.Printf("Distro %s started.\n", target)
+		}
+	},
+}
+
+var stopCmd = &cobra.Command{
+	Use:   "stop [engine]",
+	Short: "Stop a container engine or a WSL distro",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		target := strings.ToLower(args[0])
+		// Check if it's an engine
+		engines := []string{"docker", "podman", "k3s", "nerdctl", "k3d"}
+		isEngine := false
+		for _, e := range engines {
+			if e == target {
+				isEngine = true
+				break
+			}
+		}
+
+		if isEngine {
+			if err := wsl.StopEngine(target); err != nil {
+				fmt.Printf("Error stopping engine %s: %v\n", target, err)
+				os.Exit(1)
+			}
+			fmt.Printf("Engine %s stopped.\n", target)
+		} else {
+			// Try to stop as a distro
+			if err := wsl.StopDistro(target); err != nil {
+				fmt.Printf("Error stopping distro %s: %v\n", target, err)
+				os.Exit(1)
+			}
+			fmt.Printf("Distro %s stopped.\n", target)
+		}
+	},
 }
 
 var updateCmd = &cobra.Command{

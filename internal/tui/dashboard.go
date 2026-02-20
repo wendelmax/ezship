@@ -40,7 +40,7 @@ type refreshMsg struct{}
 func initialModel() model {
 	distros, _ := wsl.ListDistros()
 	return model{
-		choices:  []string{"Dashboard", "Engines", "WSL Distros", "Cleanup", "Settings", "About", "Exit"},
+		choices:  []string{"Dashboard", "Engines", "WSL Distros", "Cleanup", "Settings", "About", "Update", "Exit"},
 		cursor:   0,
 		engines:  wsl.GetAllEnginesStatus(),
 		distros:  distros,
@@ -190,6 +190,10 @@ func (m *model) handleSelection() (tea.Model, tea.Cmd) {
 			m.infoMsg = "Reset requested. Use CLI: ezship reset"
 		}
 		return *m, nil
+
+	case "Update":
+		m.infoMsg = "Updating ezship..."
+		return *m, m.cmdUpdate()
 	}
 
 	// If in main menu, select the item
@@ -265,6 +269,13 @@ func (m *model) cmdVacuum() tea.Cmd {
 	return func() tea.Msg {
 		err := wsl.Vacuum()
 		return maintenanceMsg{task: "Vacuum", err: err}
+	}
+}
+
+func (m *model) cmdUpdate() tea.Cmd {
+	return func() tea.Msg {
+		err := wsl.SelfUpdate(wsl.Version)
+		return maintenanceMsg{task: "Update", err: err}
 	}
 }
 
