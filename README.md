@@ -4,6 +4,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/wendelmax/ezship)](https://go.dev/)
+[![CI](https://github.com/wendelmax/ezship/actions/workflows/ci.yml/badge.svg)](https://github.com/wendelmax/ezship/actions/workflows/ci.yml)
+[![Latest Release](https://img.shields.io/github/v/release/wendelmax/ezship?color=green)](https://github.com/wendelmax/ezship/releases)
 
 ---
 
