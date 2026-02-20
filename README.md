@@ -23,14 +23,14 @@
 
 ## Installation
 
-### ⚡ One-Line Install
+### One-Line Install
 To install **ezship** using our automated PowerShell script, run the following in your terminal:
 
 ```powershell
 iwr -useb https://raw.githubusercontent.com/wendelmax/ezship/main/scripts/install.ps1 | iex
 ```
 
-### 📦 Manual Download
+### Manual Download
 You can download the pre-compiled binaries for your architecture (AMD64, 386, ARM64) with the embedded icon from the [Releases](https://github.com/wendelmax/ezship/releases) page.
 
 ---
@@ -70,7 +70,7 @@ cp ezship.exe docker.exe
 
 ---
 
-## 👤 Author
+## Author
 
 **Jackson Wendel Santos Sá**
 - Email: [jacksonwendel@gmail.com](mailto:jacksonwendel@gmail.com)
