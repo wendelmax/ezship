@@ -12,7 +12,7 @@ import (
 
 const DistroName = "ezship"
 
-var Version = "0.3.1"
+var Version = "0.3.2"
 
 // RunProxyCommand executes a command inside the ezship WSL distro
 func RunProxyCommand(engine string, args []string) error {
@@ -52,17 +52,20 @@ func EnsureEngineRunning(engine string) error {
 	daemonName := engine + "d"
 	serviceName := engine
 	socketPath := "/var/run/docker.sock"
+	daemonArgs := ""
 
 	switch engine {
 	case "podman":
 		daemonName = "podman"
 		serviceName = "podman"
 		socketPath = "/run/podman/podman.sock"
+		daemonArgs = "system service" // Podman needs this to provide a Docker-compatible socket
 	case "k3s", "kubectl":
 		daemonName = "k3s"
 		serviceName = "k3s"
-		socketPath = "/var/run/k3s/containerd/containerd.sock" // K3s internal containerd
-		engine = "k3s"                                         // For logging/startup
+		socketPath = "/run/k3s/containerd/containerd.sock"
+		daemonArgs = "server"
+		engine = "k3s"
 	case "nerdctl":
 		daemonName = "containerd"
 		serviceName = "containerd"
@@ -79,20 +82,24 @@ func EnsureEngineRunning(engine string) error {
 
 	// Startup sequence:
 	// 1. Try starting via 'service'
-	// 2. Fallback to manual background execution
+	// 2. Fallback to manual background execution using a shell detachment pattern
+	execCmd := fmt.Sprintf("%s %s", daemonName, daemonArgs)
+	// We use ( ... & ) and sleep to ensure the process detaches from the current WSL session
 	startupCmd := fmt.Sprintf(
-		"(service %s start || (nohup %s > /var/log/%s.log 2>&1 &))",
-		serviceName, daemonName, engine)
+		"service %s start || (nohup %s > /var/log/%s.log 2>&1 & sleep 2)",
+		serviceName, execCmd, engine)
 
 	startCmd := exec.Command("wsl", "-d", DistroName, "-u", "root", "sh", "-c", startupCmd)
 	if err := startCmd.Run(); err != nil {
 		return fmt.Errorf("failed to execute startup command: %w", err)
 	}
 
-	// Wait for socket to be ready (up to 15 seconds)
-	for i := 0; i < 30; i++ {
+	// Wait for socket to be ready (up to 20 seconds)
+	fmt.Printf("Waiting for %s socket at %s...\n", engine, socketPath)
+	for i := 0; i < 40; i++ {
 		checkSocket := exec.Command("wsl", "-d", DistroName, "ls", socketPath)
 		if err := checkSocket.Run(); err == nil {
+			fmt.Printf("%s daemon is ready.\n", engine)
 			return nil
 		}
 		time.Sleep(500 * time.Millisecond)

@@ -44,7 +44,7 @@ func GetEngineStatus(engine string) EngineInfo {
 		socketPath = "/run/podman/podman.sock"
 	case "k3s":
 		daemonName = "k3s"
-		socketPath = "/var/run/k3s/containerd/containerd.sock"
+		socketPath = "/run/k3s/containerd/containerd.sock"
 	case "nerdctl":
 		daemonName = "containerd"
 		socketPath = "/run/containerd/containerd.sock"

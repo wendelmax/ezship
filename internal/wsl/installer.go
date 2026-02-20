@@ -73,11 +73,6 @@ func InstallEngine(engine string) error {
 		return fmt.Errorf("failed to install %s: %s (%w)", engine, string(output), err)
 	}
 
-	// Start engine automatically
-	if err := EnsureEngineRunning(engine); err != nil {
-		return fmt.Errorf("installed but failed to start %s: %w", engine, err)
-	}
-
 	// Create global alias (proxy binary)
 	if err := CreateProxyBinary(engine); err != nil {
 		fmt.Printf("Warning: failed to create global alias for %s: %v\n", engine, err)
@@ -86,6 +81,11 @@ func InstallEngine(engine string) error {
 	// Extra aliases
 	if engine == "k3s" {
 		CreateProxyBinary("kubectl")
+	}
+
+	// Start engine automatically
+	if err := EnsureEngineRunning(engine); err != nil {
+		return fmt.Errorf("installed but failed to start %s: %w", engine, err)
 	}
 
 	return nil
