@@ -6,6 +6,7 @@ var (
 	// Colors
 	PrimaryColor   = lipgloss.Color("#7D56F4")
 	SecondaryColor = lipgloss.Color("#04B575")
+	SuccessColor   = lipgloss.Color("#23D18B")
 	ErrorColor     = lipgloss.Color("#ED567A")
 	BgColor        = lipgloss.Color("#1A1B26")
 
@@ -31,6 +32,12 @@ var (
 			BorderForeground(PrimaryColor).
 			Padding(1).
 			MarginTop(1)
+
+	LogPanelStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#3C3C5C")).
+			Padding(0, 1).
+			MarginTop(0)
 
 	SelectedStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FFF")).

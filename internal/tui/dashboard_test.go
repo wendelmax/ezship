@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/wendelmax/ezship/internal/wsl"
 )
 
 func TestInitialModel(t *testing.T) {
@@ -14,16 +15,9 @@ func TestInitialModel(t *testing.T) {
 	if len(m.choices) == 0 {
 		t.Error("Expected choices to be populated")
 	}
-	// Verify Update option is present (added for parity)
-	foundUpdate := false
-	for _, c := range m.choices {
-		if c == "Update" {
-			foundUpdate = true
-			break
-		}
-	}
-	if !foundUpdate {
-		t.Error("Expected 'Update' option in choices")
+	// With async optimization, these are nil at start
+	if m.engines != nil {
+		t.Error("Expected engines to be nil at start")
 	}
 }
 
@@ -100,7 +94,45 @@ func TestMaintenanceMessages(t *testing.T) {
 	newM, _ := m.Update(msg)
 	m = newM.(model)
 
-	if m.infoMsg != "Update completed" {
-		t.Errorf("Expected infoMsg 'Update completed', got '%s'", m.infoMsg)
+	// infoMsg replaced by rolling logs; last log should contain task name
+	if len(m.logs) == 0 {
+		t.Fatal("Expected at least one log entry after maintenance message")
+	}
+	lastLog := m.logs[len(m.logs)-1]
+	if !contains(lastLog, "Update") {
+		t.Errorf("Expected log to contain 'Update', got '%s'", lastLog)
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsStr(s, substr))
+}
+
+func containsStr(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+func TestRefreshMessages(t *testing.T) {
+	m := initialModel()
+
+	// Test enginesLoadedMsg
+	engines := []wsl.EngineInfo{{Name: "docker", Running: true}}
+	newM, _ := m.Update(enginesLoadedMsg(engines))
+	m = newM.(model)
+	if len(m.engines) != 1 {
+		t.Error("Expected engines to be loaded")
+	}
+
+	// Test distrosLoadedMsg
+	distros := []wsl.DistroInfo{{Name: "ezship", State: "Running"}}
+	newM, _ = m.Update(distrosLoadedMsg(distros))
+	m = newM.(model)
+	if len(m.distros) != 1 {
+		t.Error("Expected distros to be loaded")
 	}
 }

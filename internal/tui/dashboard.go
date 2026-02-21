@@ -4,24 +4,34 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/wendelmax/ezship/internal/wsl"
 )
 
+const (
+	maxLogs   = 50
+	logPanelH = 6
+	mainWidth = 73 // sidebar(20) + content(50) + gap(3)
+)
+
 type model struct {
-	choices  []string
-	cursor   int
-	selected string
-	engines  []wsl.EngineInfo
-	distros  []wsl.DistroInfo
-	dCursor  int
-	eCursor  int
-	cCursor  int
-	sCursor  int
-	config   wsl.Config
-	infoMsg  string
+	choices   []string
+	cursor    int
+	selected  string
+	engines   []wsl.EngineInfo
+	distros   []wsl.DistroInfo
+	dCursor   int
+	eCursor   int
+	cCursor   int
+	sCursor   int
+	config    wsl.Config
+	logs      []string // rolling log lines
+	logScroll int      // scroll offset (from bottom)
+	width     int
+	height    int
 }
 
 type engineActionMsg struct {
@@ -36,30 +46,55 @@ type maintenanceMsg struct {
 }
 
 type refreshMsg struct{}
+type enginesLoadedMsg []wsl.EngineInfo
+type distrosLoadedMsg []wsl.DistroInfo
+
+// --- Log helpers ---
+
+func (m *model) addLog(line string) {
+	ts := time.Now().Format("15:04:05")
+	m.logs = append(m.logs, fmt.Sprintf("[%s] %s", ts, line))
+	if len(m.logs) > maxLogs {
+		m.logs = m.logs[len(m.logs)-maxLogs:]
+	}
+	m.logScroll = 0 // auto-scroll to bottom on new log
+}
+
+// --- Init ---
 
 func initialModel() model {
-	distros, _ := wsl.ListDistros()
 	return model{
 		choices:  []string{"Dashboard", "Engines", "WSL Distros", "Cleanup", "Settings", "About", "Update", "Exit"},
 		cursor:   0,
-		engines:  wsl.GetAllEnginesStatus(),
-		distros:  distros,
-		dCursor:  0,
-		eCursor:  0,
-		cCursor:  0,
-		sCursor:  0,
+		engines:  nil,
+		distros:  nil,
 		config:   wsl.LoadConfig(),
 		selected: "Dashboard",
-		infoMsg:  "",
+		logs:     []string{},
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	return nil
+	return tea.Batch(
+		func() tea.Msg { return refreshMsg{} },
+		m.tickCmd(),
+	)
 }
+
+func (m model) tickCmd() tea.Cmd {
+	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+		return refreshMsg{}
+	})
+}
+
+// --- Update ---
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
@@ -68,6 +103,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.moveCursor(true)
 		case "down", "j":
 			m.moveCursor(false)
+		case "pgup":
+			m.logScroll++
+		case "pgdn":
+			if m.logScroll > 0 {
+				m.logScroll--
+			}
 		case "enter", " ":
 			return m.handleSelection()
 		case "s": // Start
@@ -77,58 +118,74 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "i": // Install engine
 			if m.selected == "Engines" && len(m.engines) > 0 {
 				engine := m.engines[m.eCursor].Name
-				m.infoMsg = "Installing " + engine + "..."
+				m.addLog("Queued install for " + engine + "...")
 				return m, m.cmdInstall(engine)
 			}
+		case "r": // Manual refresh
+			m.addLog("Manual refresh triggered")
+			return m, func() tea.Msg { return refreshMsg{} }
 		case "esc", "backspace", "left", "h":
 			m.selected = "Dashboard"
-			m.infoMsg = ""
 		}
 
 	case engineActionMsg:
 		if msg.err != nil {
-			m.infoMsg = "Error: " + msg.err.Error()
+			m.addLog(fmt.Sprintf("ERROR [%s %s]: %s", msg.action, msg.engine, msg.err.Error()))
 		} else {
-			m.infoMsg = fmt.Sprintf("%s: %s completed", msg.action, msg.engine)
+			m.addLog(fmt.Sprintf("OK [%s]: %s completed", msg.action, msg.engine))
 		}
-		m.engines = wsl.GetAllEnginesStatus()
-		return m, nil
+		// Immediately refresh engine states after an action
+		return m, func() tea.Msg { return enginesLoadedMsg(wsl.GetAllEnginesStatus()) }
 
 	case maintenanceMsg:
 		if msg.err != nil {
-			m.infoMsg = "Error: " + msg.err.Error()
+			m.addLog(fmt.Sprintf("ERROR [%s]: %s", msg.task, msg.err.Error()))
 		} else {
-			m.infoMsg = msg.task + " completed"
+			m.addLog(fmt.Sprintf("OK [%s]: completed", msg.task))
 		}
 		return m, nil
 
 	case refreshMsg:
-		m.engines = wsl.GetAllEnginesStatus()
-		m.distros, _ = wsl.ListDistros()
+		m.addLog("Refreshing status...")
+		return m, tea.Batch(
+			func() tea.Msg { return enginesLoadedMsg(wsl.GetAllEnginesStatus()) },
+			func() tea.Msg {
+				distros, _ := wsl.ListDistros()
+				return distrosLoadedMsg(distros)
+			},
+			m.tickCmd(),
+		)
+
+	case enginesLoadedMsg:
+		m.engines = msg
+		m.addLog(fmt.Sprintf("Engines updated (%d found)", len(m.engines)))
+		return m, nil
+
+	case distrosLoadedMsg:
+		m.distros = msg
 		return m, nil
 	}
 
 	return m, nil
 }
 
-// Helpers to reduce Update complexity
+// --- Cursor helpers ---
 
 func (m *model) moveCursor(up bool) {
 	delta := 1
 	if up {
 		delta = -1
 	}
-
 	switch m.selected {
 	case "WSL Distros":
 		m.applyMovement(&m.dCursor, delta, len(m.distros)-1)
 	case "Engines":
 		m.applyMovement(&m.eCursor, delta, len(m.engines)-1)
 	case "Cleanup":
-		m.applyMovement(&m.cCursor, delta, 1) // 2 tasks
+		m.applyMovement(&m.cCursor, delta, 1)
 	case "Settings":
-		m.applyMovement(&m.sCursor, delta, 2) // 3 settings: Auto, Default, Reset
-	default: // Main menu
+		m.applyMovement(&m.sCursor, delta, 2)
+	default:
 		m.applyMovement(&m.cursor, delta, len(m.choices)-1)
 	}
 }
@@ -146,35 +203,36 @@ func (m *model) applyMovement(cursor *int, delta int, max int) {
 	}
 }
 
+// --- Selection ---
+
 func (m *model) handleSelection() (tea.Model, tea.Cmd) {
-	// If in a sub-view, execute its action
 	switch m.selected {
 	case "Engines":
 		if len(m.engines) > 0 {
 			engine := m.engines[m.eCursor].Name
-			m.infoMsg = "Installing " + engine + "..."
+			m.addLog("Installing " + engine + "...")
 			return *m, m.cmdInstall(engine)
 		}
 		return *m, nil
 
 	case "Cleanup":
 		switch m.cCursor {
-		case 0: // Prune
-			m.infoMsg = "Pruning engines..."
+		case 0:
+			m.addLog("Pruning engines...")
 			return *m, m.cmdPrune()
-		case 1: // Vacuum
-			m.infoMsg = "Vacuuming disk (this may take a while)..."
+		case 1:
+			m.addLog("Vacuuming disk (this may take a while)...")
 			return *m, m.cmdVacuum()
 		}
 		return *m, nil
 
 	case "Settings":
 		switch m.sCursor {
-		case 0: // Auto-Start
+		case 0:
 			m.config.AutoStartDaemon = !m.config.AutoStartDaemon
 			wsl.SaveConfig(m.config)
-			m.infoMsg = "Auto-Start toggled"
-		case 1: // Default Engine
+			m.addLog(fmt.Sprintf("Auto-Start set to %v", m.config.AutoStartDaemon))
+		case 1:
 			opts := []string{"docker", "podman", "k3s"}
 			idx := 0
 			for i, e := range opts {
@@ -185,43 +243,49 @@ func (m *model) handleSelection() (tea.Model, tea.Cmd) {
 			}
 			m.config.DefaultEngine = opts[idx]
 			wsl.SaveConfig(m.config)
-			m.infoMsg = "Default engine: " + m.config.DefaultEngine
-		case 2: // Reset
-			m.infoMsg = "Reset requested. Use CLI: ezship reset"
+			m.addLog("Default engine: " + m.config.DefaultEngine)
+		case 2:
+			m.addLog("Reset: use CLI 'ezship reset' to proceed")
 		}
 		return *m, nil
 
 	case "Update":
-		m.infoMsg = "Updating ezship..."
+		m.addLog("Starting self-update...")
 		return *m, m.cmdUpdate()
 	}
 
-	// If in main menu, select the item
+	// Main menu navigation
 	choice := m.choices[m.cursor]
 	if choice == "Exit" {
 		return *m, tea.Quit
 	}
 	m.selected = choice
-	m.enterView()
-	return *m, nil
+	return *m, m.enterView()
 }
 
-func (m *model) enterView() {
-	m.infoMsg = ""
+func (m *model) enterView() tea.Cmd {
 	switch m.selected {
 	case "WSL Distros":
-		m.distros, _ = wsl.ListDistros()
 		m.dCursor = 0
+		return func() tea.Msg {
+			distros, _ := wsl.ListDistros()
+			return distrosLoadedMsg(distros)
+		}
 	case "Engines":
-		m.engines = wsl.GetAllEnginesStatus()
 		m.eCursor = 0
+		return func() tea.Msg {
+			return enginesLoadedMsg(wsl.GetAllEnginesStatus())
+		}
 	case "Cleanup":
 		m.cCursor = 0
 	case "Settings":
 		m.sCursor = 0
 		m.config = wsl.LoadConfig()
 	}
+	return nil
 }
+
+// --- Commands ---
 
 func (m *model) cmdStart() tea.Cmd {
 	return func() tea.Msg {
@@ -279,6 +343,8 @@ func (m *model) cmdUpdate() tea.Cmd {
 	}
 }
 
+// --- View ---
+
 func (m model) View() string {
 	var b strings.Builder
 
@@ -289,7 +355,9 @@ func (m model) View() string {
 	// Sidebar (Menu)
 	var menu strings.Builder
 	for i, choice := range m.choices {
-		if m.cursor == i {
+		if m.selected != "Dashboard" && choice == m.selected {
+			menu.WriteString(SelectedStyle.Render(" > "+choice) + "\n")
+		} else if m.selected == "Dashboard" && m.cursor == i {
 			menu.WriteString(SelectedStyle.Render(" > "+choice) + "\n")
 		} else {
 			menu.WriteString(NormalStyle.Render("   "+choice) + "\n")
@@ -310,15 +378,10 @@ func (m model) View() string {
 	case "Cleanup":
 		content.WriteString(TitleStyle.Render("System Cleanup") + "\n\n")
 		content.WriteString("  Controls: [Enter] Run Selected Task\n\n")
-
-		tasks := []struct {
-			name string
-			desc string
-		}{
+		tasks := []struct{ name, desc string }{
 			{"Prune Engines", "Remove unused containers/images"},
 			{"Vacuum Disk", "Compact WSL disk (vhdx)"},
 		}
-
 		for i, t := range tasks {
 			prefix := "  "
 			if i == m.cCursor {
@@ -332,11 +395,7 @@ func (m model) View() string {
 	case "Settings":
 		content.WriteString(TitleStyle.Render("Settings") + "\n\n")
 		content.WriteString("  Controls: [Enter] Change Value\n\n")
-
-		settings := []struct {
-			name  string
-			value string
-		}{
+		settings := []struct{ name, value string }{
 			{"Auto-Start", "ON"},
 			{"Default Engine", m.config.DefaultEngine},
 			{"Danger Zone", "Reset Environment"},
@@ -344,7 +403,6 @@ func (m model) View() string {
 		if !m.config.AutoStartDaemon {
 			settings[0].value = "OFF"
 		}
-
 		for i, s := range settings {
 			prefix := "  "
 			if i == m.sCursor {
@@ -356,30 +414,39 @@ func (m model) View() string {
 			}
 			content.WriteString(fmt.Sprintf("%s%-15s [%s]\n", prefix, s.name, lipgloss.NewStyle().Foreground(valStyle).Render(s.value)))
 		}
-
 		content.WriteString("\n  " + NormalStyle.Render(fmt.Sprintf("Distro: %s | v%s", wsl.DistroName, wsl.Version)))
 
 	case "Engines":
 		content.WriteString(TitleStyle.Render("Engine Management") + "\n\n")
-		content.WriteString("  Controls: [i] Install | [s] Start | [t] Stop\n\n")
+		content.WriteString("  Controls: [i] Install | [Enter] Install | [s] Start | [t] Stop | [r] Refresh\n\n")
+		if len(m.engines) == 0 {
+			content.WriteString("  Loading...\n")
+		}
 		for i, e := range m.engines {
 			prefix := "  "
 			if i == m.eCursor {
 				prefix = "> "
 			}
-			status := "Not Installed"
+			statusText := "Not Installed"
+			statusColor := ErrorColor
 			if e.Version != "Not Installed" {
-				status = "Installed"
+				statusText = "Installed"
+				statusColor = SecondaryColor
 				if e.Running {
-					status = "Running"
+					statusText = "Running"
+					statusColor = SuccessColor
 				}
 			}
-			content.WriteString(fmt.Sprintf("%s%-10s [%s]\n", prefix, e.Name, status))
+			statusStr := lipgloss.NewStyle().Foreground(statusColor).Render(statusText)
+			content.WriteString(fmt.Sprintf("%s%-10s [%s]  %s\n", prefix, e.Name, statusStr, e.Version))
 		}
 
 	case "WSL Distros":
 		content.WriteString(TitleStyle.Render("WSL Distributions") + "\n\n")
-		content.WriteString("  Controls: [s] Start | [t] Stop | [X] Delete\n\n")
+		content.WriteString("  Controls: [s] Start | [t] Stop | [r] Refresh\n\n")
+		if len(m.distros) == 0 {
+			content.WriteString("  Loading...\n")
+		}
 		for i, d := range m.distros {
 			prefix := "  "
 			if i == m.dCursor {
@@ -399,6 +466,9 @@ func (m model) View() string {
 
 	default: // Dashboard
 		content.WriteString(TitleStyle.Render("Local Engines") + "\n\n")
+		if len(m.engines) == 0 {
+			content.WriteString("  Loading engine status...\n")
+		}
 		for _, e := range m.engines {
 			statusColor := SecondaryColor
 			statusText := "Running"
@@ -409,32 +479,73 @@ func (m model) View() string {
 					statusText = "Not Found"
 				}
 			}
+			if e.Running {
+				statusColor = SuccessColor
+			}
 			statusItem := lipgloss.NewStyle().Foreground(statusColor).Render("● " + statusText)
-			content.WriteString(fmt.Sprintf("  %-10s %-12s %s\n", e.Name, statusItem, e.Version))
+			content.WriteString(fmt.Sprintf("  %-10s %-20s %s\n", e.Name, statusItem, e.Version))
 		}
 	}
 
-	// Join Panels
+	// Join main panels
 	mainPanel := lipgloss.JoinHorizontal(lipgloss.Top,
 		BoxStyle.Width(20).Render(menu.String()),
 		BoxStyle.Width(50).Render(content.String()),
 	)
 	b.WriteString(mainPanel + "\n")
 
-	// Info Message
-	if m.infoMsg != "" {
-		b.WriteString("  " + lipgloss.NewStyle().Foreground(SecondaryColor).Bold(true).Render(m.infoMsg) + "\n")
+	// --- Scrollable Log Panel ---
+	logLines := m.visibleLogs()
+	var logBuf strings.Builder
+	logBuf.WriteString(lipgloss.NewStyle().Foreground(SecondaryColor).Bold(true).Render("  Logs") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("  [PgUp/PgDn scroll]") + "\n")
+	for _, line := range logLines {
+		logBuf.WriteString("  " + line + "\n")
 	}
+	logPanel := LogPanelStyle.Width(mainWidth).Render(logBuf.String())
+	b.WriteString(logPanel + "\n")
 
 	// Footer
-	footer := FooterStyle.Render(" ↑/↓: move • enter: select • esc: back • q: quit ")
+	footer := FooterStyle.Render(" ↑/↓: move • enter: select • s: start • t: stop • r: refresh • esc: back • q: quit ")
 	b.WriteString(footer)
 
 	return b.String()
 }
 
+// visibleLogs returns the last N log lines respecting logScroll offset
+func (m model) visibleLogs() []string {
+	total := len(m.logs)
+	if total == 0 {
+		return []string{lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("No logs yet...")}
+	}
+
+	// show logPanelH-1 lines (one for header)
+	visible := logPanelH - 1
+	end := total - m.logScroll
+	if end <= 0 {
+		end = 1
+	}
+	start := end - visible
+	if start < 0 {
+		start = 0
+	}
+
+	lines := m.logs[start:end]
+	styled := make([]string, len(lines))
+	for i, l := range lines {
+		c := lipgloss.Color("250")
+		if strings.Contains(l, "ERROR") {
+			c = ErrorColor
+		} else if strings.Contains(l, "OK") {
+			c = SuccessColor
+		}
+		styled[i] = lipgloss.NewStyle().Foreground(c).Render(l)
+	}
+	return styled
+}
+
 func Start() {
-	p := tea.NewProgram(initialModel())
+	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v", err)
 		os.Exit(1)

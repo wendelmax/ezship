@@ -6,26 +6,47 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // PruneEngines runs 'prune' on all running engines supported by ezship
 func PruneEngines() error {
-	engines := []string{"docker", "podman"}
-	errs := []string{}
-	for _, engine := range engines {
-		// Only prune if engine is installed and running
-		status := GetEngineStatus(engine)
-		if !status.Running {
-			continue
-		}
+	engines := []string{"docker", "podman", "k3s"}
+	errs := make(chan string, len(engines))
+	var wg sync.WaitGroup
 
-		cmd := exec.Command("wsl", "-d", DistroName, "-e", engine, "system", "prune", "-a", "-f", "--volumes")
-		if output, err := cmd.CombinedOutput(); err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %s", engine, string(output)))
-		}
+	for _, engine := range engines {
+		wg.Add(1)
+		go func(e string) {
+			defer wg.Done()
+			status := GetEngineStatus(e)
+			if !status.Running {
+				return
+			}
+
+			// For k3s, we might want to prune containerd
+			if e == "k3s" {
+				return
+			}
+
+			wslArgs := []string{"-d", DistroName, "-e", e, "system", "prune", "-a", "-f", "--volumes"}
+			cmd := exec.Command("wsl", wslArgs...)
+			if output, err := cmd.CombinedOutput(); err != nil {
+				errs <- fmt.Sprintf("%s: %s", e, string(output))
+			}
+		}(engine)
 	}
-	if len(errs) > 0 {
-		return fmt.Errorf("prune errors: %s", strings.Join(errs, "; "))
+
+	wg.Wait()
+	close(errs)
+
+	var collectedErrs []string
+	for err := range errs {
+		collectedErrs = append(collectedErrs, err)
+	}
+
+	if len(collectedErrs) > 0 {
+		return fmt.Errorf("prune errors: %s", strings.Join(collectedErrs, "; "))
 	}
 	return nil
 }
