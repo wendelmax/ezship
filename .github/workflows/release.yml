@@ -5,10 +5,15 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build Binary
     runs-on: windows-latest
+    permissions:
+      contents: read
     strategy:
       matrix:
         arch: [amd64, 386, arm64]
@@ -19,7 +24,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.25'
           cache: true
 
       - name: Install dependencies
