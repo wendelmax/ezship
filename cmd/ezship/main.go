@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/wendelmax/ezship/internal/ide"
 	"github.com/wendelmax/ezship/internal/provider"
 	"github.com/wendelmax/ezship/internal/tui"
 	"github.com/wendelmax/ezship/internal/wsl"
@@ -33,6 +34,7 @@ Repo: github.com/wendelmax/ezship`,
 
 func init() {
 	setupCmd.Flags().BoolVarP(&nativeFlag, "native", "n", false, "Install engine natively on Windows host (without WSL2)")
+	setupCmd.AddCommand(ideSetupCmd)
 	rootCmd.AddCommand(dashboardCmd)
 	rootCmd.AddCommand(setupCmd)
 	rootCmd.AddCommand(statusCmd)
@@ -198,6 +200,56 @@ var setupCmd = &cobra.Command{
 		if err := wsl.SetupDistro(); err != nil {
 			fmt.Printf("Error setting up distro: %v\n", err)
 			os.Exit(1)
+		}
+	},
+}
+
+var ideSetupCmd = &cobra.Command{
+	Use:   "ide [intellij|vscode]",
+	Short: "Autoconfigure IDEs (IntelliJ IDEA, VS Code) for Docker daemon integration",
+	Run: func(cmd *cobra.Command, args []string) {
+		dockerMode := "native"
+		if nativeFlag {
+			dockerMode = "native"
+		}
+
+		if len(args) > 0 {
+			target := strings.ToLower(args[0])
+			switch target {
+			case "intellij":
+				ij := &ide.IntelliJConfigurator{}
+				if err := ij.Configure(dockerMode); err != nil {
+					fmt.Printf("Error configuring IntelliJ: %v\n", err)
+				} else {
+					fmt.Printf("IntelliJ IDEA Docker configuration updated successfully (%s mode).\n", dockerMode)
+				}
+			case "vscode":
+				vsc := &ide.VSCodeConfigurator{}
+				if err := vsc.Configure(dockerMode); err != nil {
+					fmt.Printf("Error configuring VS Code: %v\n", err)
+				} else {
+					fmt.Printf("VS Code Docker configuration updated successfully (%s mode).\n", dockerMode)
+				}
+			default:
+				fmt.Printf("Unknown IDE: %s. Supported: intellij, vscode\n", target)
+			}
+			return
+		}
+
+		// Interactive / Auto-detection if no args
+		fmt.Println("Autoconfiguring all detected IDEs...")
+		ides := ide.DetectIDEs()
+		if len(ides) == 0 {
+			fmt.Println("No supported IDEs (IntelliJ IDEA, VS Code) detected in AppData.")
+			return
+		}
+
+		for _, cfg := range ides {
+			if err := cfg.Configure(dockerMode); err == nil {
+				fmt.Printf("Successfully configured %s for Docker (%s mode).\n", cfg.Name(), dockerMode)
+			} else {
+				fmt.Printf("Notice for %s: %v\n", cfg.Name(), err)
+			}
 		}
 	},
 }
