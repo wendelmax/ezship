@@ -1,6 +1,6 @@
 # ezship
 
-**ezship** is a lightweight, high-performance multi-engine container manager designed specifically for Windows users. By leveraging **WSL2** and **Ubuntu Core**, it provides a "Docker Desktop" experience without the massive resource overhead.
+**ezship** is a lightweight, high-performance multi-engine container manager designed specifically for Windows users. By leveraging **WSL2** and **Windows Native execution**, it provides a complete "Docker Desktop" experience without the massive resource overhead.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/wendelmax/ezship)](https://go.dev/)
@@ -11,18 +11,22 @@
 
 ## Key Features
 
+- **Dual-Provider Architecture**:
+  - **WSL2 Mode (Ubuntu Minimal)**: Isolated Linux kernel backend for advanced multi-engine workflows.
+  - **Windows Native Mode (`--native`)**: Zero-WSL dependency, running Docker directly on Windows host via Named Pipe (`npipe:////./pipe/docker_engine`).
+- **Automatic IDE Integration**: One-command autoconfiguration for **IntelliJ IDEA** (`remote-servers.xml`) and **VS Code** (`settings.json`).
 - **Modern TUI Dashboard**: An interactive, visually stunning terminal interface to monitor and manage your infrastructure.
 - **Transparent Proxying**: Run `docker ps`, `podman run`, or `kubectl get pods` directly from any Windows terminal.
 - **Multi-Engine Support**: Seamlessly switch between **Docker**, **Podman**, **nerdctl (containerd)**, and **k3s**.
 - **Multi-Cluster Support**: Orchestrate multiple K3s clusters inside Docker using **k3d**.
 - **Real-time Monitoring**: Instant status detection of running engines and versions.
-- **Smart Path Translation**: Automatically converts Windows paths (`C:\`) to Linux paths (`/mnt/c/`) for volume mounting.
+- **Smart Path Translation**: Automatically converts Windows paths (`C:\`) to Linux paths (`/mnt/c/`) for volume mounting in WSL2 mode.
 - **One-Click Update**: `ezship update` keeps your binary synchronized with the latest GitHub release.
 - **Maintenance Tools**: 
   - `ezship vacuum`: Compresses the WSL disk (`.vhdx`) to reclaim storage space.
   - `ezship prune`: Global cleanup of unused containers, images, and volumes.
   - `ezship update`: Automatically downloads and applies the latest version.
-  - `ezship reset`: Instantly rebuilds your environment from scratch.
+  - `ezship reset`: Instantly rebuilds or cleans up your environment from scratch.
 
 ---
 
@@ -56,11 +60,30 @@ ezship
 ```
 
 ### Setup an Engine
+
+#### WSL2 Mode (Default)
 Install your favorite container engine inside the Ubuntu backend:
 ```powershell
 ezship setup docker
 # or
 ezship setup podman
+```
+
+#### Windows Native Mode (No WSL2 dependency)
+Run Docker natively on Windows host without WSL2:
+```powershell
+ezship setup docker --native
+```
+
+### Autoconfigure IDEs
+Integrate Docker Daemon connection automatically into **IntelliJ IDEA** and **VS Code**:
+```powershell
+# Autodetect all installed IDEs
+ezship setup ide
+
+# Or target specific IDEs
+ezship setup ide intellij
+ezship setup ide vscode
 ```
 
 ### Transparent Mode (Global Aliases)
@@ -74,8 +97,9 @@ Supported aliases: `docker`, `podman`, `kubectl`, `nerdctl`, `k3d`.
 
 | Command | Description |
 | :--- | :--- |
+| `ezship setup ide` | Autoconfigures Docker connection in IntelliJ IDEA and VS Code |
 | `ezship prune` | Cleans up unused resources across all engines |
-| `ezship vacuum` | Compacts WSL disk file to free up host space |
+| `ezship vacuum` | Compacts WSL disk file to free up host space (WSL2 mode) |
 | `ezship update` | Downloads and applies the latest version from GitHub |
 | `ezship reset` | Completely uninstalls and wipes the ezship environment |
 | `ezship --version` | Displays the current version of the tool |
