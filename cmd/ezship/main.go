@@ -7,15 +7,18 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/wendelmax/ezship/internal/provider"
 	"github.com/wendelmax/ezship/internal/tui"
 	"github.com/wendelmax/ezship/internal/wsl"
 )
 
+var nativeFlag bool
+
 var rootCmd = &cobra.Command{
 	Use:     "ezship",
 	Version: wsl.Version,
-	Short:   "ezship is a lightweight multi-engine container manager for Windows via WSL2",
-	Long: `ezship simplifies container management on Windows by using WSL2 and Ubuntu.
+	Short:   "ezship is a lightweight multi-engine container manager for Windows via WSL2 and Native Host",
+	Long: `ezship simplifies container management on Windows by using WSL2 and Native Windows execution.
 It supports Docker, Podman, nerdctl, k3d, and Kubernetes (k3s) with a beautiful TUI dashboard.
 
 Author: Jackson Wendel Santos Sá <jacksonwendel@gmail.com>
@@ -29,6 +32,7 @@ Repo: github.com/wendelmax/ezship`,
 }
 
 func init() {
+	setupCmd.Flags().BoolVarP(&nativeFlag, "native", "n", false, "Install engine natively on Windows host (without WSL2)")
 	rootCmd.AddCommand(dashboardCmd)
 	rootCmd.AddCommand(setupCmd)
 	rootCmd.AddCommand(statusCmd)
@@ -167,21 +171,33 @@ var resetCmd = &cobra.Command{
 
 var setupCmd = &cobra.Command{
 	Use:   "setup [engine]",
-	Short: "Setup the ezship WSL distro and optionally install an engine (docker, podman, k3s, nerdctl, k3d)",
+	Short: "Setup the ezship environment and optionally install an engine (docker, podman, k3s, nerdctl, k3d)",
 	Run: func(cmd *cobra.Command, args []string) {
-		// 1. Setup Distro
-		if err := wsl.SetupDistro(); err != nil {
-			fmt.Printf("Error setting up distro: %v\n", err)
-			os.Exit(1)
-		}
-
-		// 2. Install Engine if provided
 		if len(args) > 0 {
 			engine := strings.ToLower(args[0])
-			if err := wsl.InstallEngine(engine); err != nil {
+			var p provider.EngineProvider
+			if nativeFlag {
+				p = &provider.NativeProvider{}
+			} else {
+				p = &provider.WSLProvider{}
+				if err := wsl.SetupDistro(); err != nil {
+					fmt.Printf("Error setting up WSL distro: %v\n", err)
+					os.Exit(1)
+				}
+			}
+
+			if err := p.InstallEngine(engine); err != nil {
 				fmt.Printf("Error installing engine %s: %v\n", engine, err)
 				os.Exit(1)
 			}
+			fmt.Printf("Engine %s set up successfully using %s provider.\n", engine, p.Name())
+			return
+		}
+
+		// Default setup without engine args sets up WSL distro
+		if err := wsl.SetupDistro(); err != nil {
+			fmt.Printf("Error setting up distro: %v\n", err)
+			os.Exit(1)
 		}
 	},
 }
